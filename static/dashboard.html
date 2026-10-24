@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рядом — заявки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Unbounded:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 18px; min-width: 130px; }
+  .stat b { display: block; font: 700 26px/1.1 var(--display); }
+  .stat span { color: var(--muted); font-size: 14px; }
+  .vols { display: flex; flex-wrap: wrap; gap: 6px; margin: -8px 0 24px; }
+
+  .list { display: grid; gap: 14px; }
+  .req { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px 22px 18px 26px; position: relative; overflow: hidden; }
+  .req::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--sea); }
+  .req.high::before { background: var(--urgent); }
+  .req.medium::before { background: var(--sun); }
+  .req.taken { background: #F7FAF8; }
+  .req.taken::before { background: var(--ok); }
+  .req.fresh { animation: fresh 2.4s ease-out; }
+  @keyframes fresh { from { box-shadow: 0 0 0 4px var(--sun); } to { box-shadow: 0 0 0 0 transparent; } }
+
+  .head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .req h3 { font: 600 18px/1.35 var(--display); margin: 0; max-width: 60ch; }
+  .time { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; font-size: 14px; }
+  .facts div span { color: var(--muted); }
+
+  .cands { margin-top: 14px; display: grid; gap: 8px; }
+  .cand { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg); }
+  .avatar { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--sea-soft); display: grid; place-items: center; font-weight: 700; }
+  .cand .who { flex: 1; min-width: 0; }
+  .cand .why { color: var(--muted); font-size: 14px; }
+  .cand .btn { padding: 8px 16px; font-size: 14px; }
+
+  .done { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  audio { width: 100%; max-width: 380px; height: 36px; }
+  details { margin-top: 12px; font-size: 14px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  details pre { white-space: pre-wrap; font: 14px/1.5 var(--text); background: var(--bg); padding: 12px; border-radius: var(--r-md); }
+
+  .brief summary { color: var(--ink); font-weight: 700; }
+  .brief pre { background: var(--sun-soft); }
+  .empty { text-align: center; padding: 48px 24px; }
+  .empty p { color: var(--muted); max-width: 44ch; margin: 8px auto 20px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Рядом</span></a>
+  <nav class="nav"><a href="/">Линия</a><a href="/volunteers" aria-current="page">Заявки</a><a href="/join">Стать волонтёром</a></nav>
+</header>
+
+<main>
+  <h1>Заявки</h1>
+  <p class="lead">Срочные наверху. Gemma 4 предлагает волонтёров и объясняет выбор, координатор или сам волонтёр назначает.</p>
+
+  <div class="stats" id="stats"></div>
+  <div class="vols" id="vols"></div>
+
+  <div class="list" id="list">
+    <div class="panel empty">
+      <h2>Заявок пока нет</h2>
+      <p>Позвоните на линию или опишите просьбу текстом. Заявка появится здесь через несколько секунд.</p>
+      <a class="btn btn-sun" href="/" style="text-decoration:none">Позвонить на линию</a>
+    </div>
+  </div>
+</main>
+
+<script>
+const URG = { high: "срочно", medium: "на неделе", low: "без срока" };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+let last = "";
+const seen = new Set();
+let firstLoad = true;
+
+async function assign(id, name, btn) {
+  btn.disabled = true; btn.textContent = "Назначаем…";
+  const r = await fetch(`/api/requests/${id}/take`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                      body: JSON.stringify({ volunteer: name }) });
+  if (r.status === 409) alert("Эту заявку уже взял другой волонтёр.");
+  load();
+}
+
+function card(r) {
+  const fresh = !firstLoad && !seen.has(r.id);
+  seen.add(r.id);
+  const urg = r.status === "taken" ? "" : r.urgency;
+  const chips = [
+    r.urgency === "high" ? `<span class="chip urgent">${URG.high}</span>` : `<span class="chip">${esc(URG[r.urgency] || r.urgency)}</span>`,
+    ...(r.topics || [r.category]).filter(Boolean).map((t) => `<span class="chip">${esc(t)}</span>`),
+    ...(r.help || []).map((t) => `<span class="chip help">${esc(t)}</span>`),
+    r.needs_language ? `<span class="chip">язык: ${esc(r.needs_language)}</span>` : "",
+    r.notified ? `<span class="chip">волонтёрам в Telegram: ${r.notified}</span>` : "",
+    r.requester_chat ? `<span class="chip ok">человек на связи в Telegram</span>` : "",
+  ].join("");
+  const facts = [["Кто", r.name], ["Когда", r.when], ["Где", r.district], ["Контакт", r.contact]]
+    .filter(([, v]) => v).map(([k, v]) => `<div><span>${k}:</span> ${esc(v)}</div>`).join("");
+  const body = r.status === "taken"
+    ? `<div class="done"><span class="chip ok">Взял(а): ${esc(r.volunteer)}</span>
+         ${r.audio ? `<audio controls src="/api/requests/${r.id}/audio" aria-label="Голосовое подтверждение звонящему"></audio>` : ""}</div>
+       ${r.briefing ? `<details class="brief" open><summary>Памятка волонтёру от Gemma 4</summary><pre>${esc(r.briefing)}</pre></details>`
+                    : '<p class="small muted">Gemma готовит памятку волонтёру…</p>'}`
+    : `<div class="cands">${(r.candidates || []).map((v) => `
+        <div class="cand"><span class="avatar">${esc(v.name[0])}</span>
+          <div class="who"><b>${esc(v.name)}</b><div class="why">${esc(v.reason)}</div></div>
+          <button class="btn btn-ink" data-id="${r.id}" data-name="${esc(v.name)}">Назначить</button></div>`).join("")
+        || '<p class="muted">Подходящих волонтёров нет. Найдите помощника вручную.</p>'}</div>`;
+  return `
+    <article class="req ${urg} ${r.status === "taken" ? "taken" : ""} ${fresh ? "fresh" : ""}">
+      <div class="head"><h3>${esc(r.summary)}</h3>
+        <span class="time">заявка ${r.id}, ${new Date(r.created * 1000).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span></div>
+      <div class="chips">${chips}</div>
+      ${facts ? `<div class="facts">${facts}</div>` : ""}
+      ${body}
+      <details><summary>Расшифровка звонка</summary><pre>${esc(r.transcript)}</pre></details>
+    </article>`;
+}
+
+async function load() {
+  const [items, vols] = await Promise.all([
+    fetch("/api/requests").then((r) => r.json()),
+    fetch("/api/volunteers").then((r) => r.json()),
+  ]);
+  const snapshot = JSON.stringify([items, vols]);
+  if (snapshot === last) return;   // не перерисовываем — иначе сбросится играющее аудио
+  last = snapshot;
+  const open = items.filter((r) => r.status !== "taken");
+  const stats = [
+    [open.length, "ждут помощи"],
+    [open.filter((r) => r.urgency === "high").length, "срочных"],
+    [items.length - open.length, "взяты"],
+    [vols.length, `волонтёров, ${vols.filter((v) => v.telegram).length} в Telegram`],
+  ];
+  document.getElementById("stats").innerHTML = stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join("");
+  if (items.length) document.getElementById("list").innerHTML = items.map(card).join("");
+  firstLoad = false;
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-id]");
+  if (b) assign(b.dataset.id, b.dataset.name, b);
+});
+load(); setInterval(load, 3000);
+</script>
+</body>
+</html>

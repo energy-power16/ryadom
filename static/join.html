@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рядом — стать волонтёром</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Unbounded:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .how { list-style: none; padding: 0; margin: 8px 0 0; counter-reset: s; }
+  .how li { counter-increment: s; position: relative; padding: 0 0 16px 44px; }
+  .how li::before { content: counter(s); position: absolute; left: 0; top: -1px; width: 28px; height: 28px; border-radius: 50%;
+                    background: var(--sun); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  label.f { display: block; font-weight: 700; margin: 20px 0 8px; }
+  label.f:first-child { margin-top: 0; }
+  .hint { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  input[type=text] { width: 100%; font: inherit; border: 1.5px solid var(--line); border-radius: var(--r-md); padding: 11px 14px; }
+  input[type=text]:focus { border-color: var(--ink); outline: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips label { border: 1.5px solid var(--line); border-radius: var(--r-sm); padding: 7px 14px; cursor: pointer; user-select: none; font-size: 15px; background: var(--surface); }
+  .chips input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .chips label:has(input:checked) { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .chips label:has(input:focus-visible) { outline: 3px solid var(--sun); outline-offset: 2px; }
+  #err { color: var(--urgent); font-weight: 600; margin-top: 12px; min-height: 1em; }
+  .tg { display: inline-block; margin-top: 8px; padding: 13px 24px; border-radius: var(--r-sm); background: #2AA3E0; color: #fff; text-decoration: none; font-weight: 700; }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Рядом</span></a>
+  <nav class="nav"><a href="/">Линия</a><a href="/volunteers">Заявки</a><a href="/join" aria-current="page">Стать волонтёром</a></nav>
+</header>
+
+<main class="grid">
+  <section>
+    <h1>Помогайте соседям, когда удобно</h1>
+    <p class="lead">Многим недавно переехавшим не хватает одного человека рядом: перевести у врача, сходить в банк, разобрать письмо.</p>
+    <ol class="how">
+      <li><b>Отметьте, с чем можете помочь</b><div class="muted">Сферы, языки и районы — по ним Gemma 4 подбирает заявки.</div></li>
+      <li><b>Подключите Telegram</b><div class="muted">Туда придут только подходящие вам заявки, с объяснением почему.</div></li>
+      <li><b>Нажмите «Беру»</b><div class="muted">Кто первым взял заявку, получает контакт человека.</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <form class="panel" id="form">
+      <label class="f" for="name">Как вас зовут</label>
+      <input type="text" id="name" required autocomplete="given-name" placeholder="Аня">
+
+      <label class="f">Языки, на которых говорите</label>
+      <div class="chips">
+        <label><input type="checkbox" name="lang" value="es">испанский</label>
+        <label><input type="checkbox" name="lang" value="ca">каталанский</label>
+        <label><input type="checkbox" name="lang" value="en">английский</label>
+      </div>
+
+      <label class="f">С чем можете помочь</label>
+      <div class="chips" id="topics"></div>
+
+      <label class="f">Как можете помочь</label>
+      <div class="chips" id="help"></div>
+
+      <label class="f" for="districts">Удобные районы</label>
+      <input type="text" id="districts" placeholder="Gràcia, Eixample">
+      <div class="hint">Через запятую. Можно по-русски.</div>
+
+      <label class="f" for="contact">Контакт</label>
+      <input type="text" id="contact" placeholder="+34 … или @telegram">
+
+      <button class="btn btn-sun" type="submit" style="margin-top:22px">Стать волонтёром</button>
+      <div id="err" role="alert"></div>
+    </form>
+
+    <div class="panel" id="done" hidden>
+      <h2>Спасибо, вы с нами</h2>
+      <p id="doneText" class="muted"></p>
+      <a class="tg" id="tgLink" target="_blank" rel="noopener" hidden>Подключить Telegram</a>
+    </div>
+  </section>
+</main>
+
+<script>
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+fetch("/api/tags").then((r) => r.json()).then((t) => {
+  for (const group of ["topics", "help"])
+    document.getElementById(group).innerHTML = Object.entries(t[group]).map(([k, label]) =>
+      `<label title="${esc(label)}"><input type="checkbox" name="skill" value="${esc(k)}">${esc(label.split(":")[0])}</label>`).join("");
+});
+const vals = (n) => [...document.querySelectorAll(`input[name=${n}]:checked`)].map((i) => i.value);
+document.getElementById("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const err = document.getElementById("err"); err.textContent = "";
+  const body = {
+    name: document.getElementById("name").value.trim(),
+    languages: vals("lang"), skills: vals("skill"),
+    districts: document.getElementById("districts").value.split(",").map((s) => s.trim()).filter(Boolean),
+    contact: document.getElementById("contact").value.trim() || null,
+  };
+  if (!body.skills.length) { err.textContent = "Отметьте хотя бы одну сферу или тип помощи."; return; }
+  try {
+    const r = await fetch("/api/volunteers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || `сервер ответил ${r.status}`);
+    document.getElementById("form").hidden = true;
+    document.getElementById("done").hidden = false;
+    if (data.telegram_link) {
+      document.getElementById("doneText").textContent = "Остался один шаг: подключите Telegram. Туда будут приходить подходящие заявки с кнопкой «Беру».";
+      const a = document.getElementById("tgLink"); a.href = data.telegram_link; a.hidden = false;
+    } else {
+      document.getElementById("doneText").textContent = "Подходящие заявки появятся на странице заявок.";
+    }
+  } catch (ex) { err.textContent = "Регистрация не прошла: " + ex.message; }
+};
+</script>
+</body>
+</html>

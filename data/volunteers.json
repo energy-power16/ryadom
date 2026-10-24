@@ -1,0 +1,7 @@
+[
+  {"name": "Аня", "languages": ["es", "ca", "en"], "districts": ["Gràcia", "Eixample"], "skills": ["врач", "школа", "перевод", "сопровождение", "запись"]},
+  {"name": "Дима", "languages": ["es", "en"], "districts": ["Sants", "Poble-sec"], "skills": ["экстранхерия", "аюнтамьенто", "налоги", "соцстрах", "бумаги", "запись"]},
+  {"name": "Лена", "languages": ["es"], "districts": ["Sant Martí", "Poblenou"], "skills": ["покупки", "общение", "врач", "сопровождение", "разговор", "связь", "обучение"]},
+  {"name": "Серёжа", "languages": ["es", "ca"], "districts": ["Eixample", "Sant Antoni"], "skills": ["банк", "жильё", "связь", "звонок", "перевод", "бумаги"]},
+  {"name": "Катя", "languages": ["en", "es"], "districts": ["Badalona", "Sant Andreu"], "skills": ["школа", "работа", "транспорт", "общение", "разговор", "другое"]}
+]

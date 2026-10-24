@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рядом — линия взаимопомощи</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Unbounded:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  .grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+  /* Кнопка звонка и «звуковые круги» — главный элемент */
+  .stage { display: flex; flex-direction: column; align-items: center; padding: 28px 0 8px; }
+  .dial { position: relative; width: 168px; height: 168px; }
+  .dial .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--sun); opacity: 0; pointer-events: none; }
+  .dial[data-state="listening"] .ring { animation: ring 2.4s ease-out infinite; }
+  .dial[data-state="speaking"] .ring { border-color: var(--sea); animation: ring 1.6s ease-out infinite; }
+  .dial .ring:nth-child(2) { animation-delay: .8s !important; }
+  .dial .ring:nth-child(3) { animation-delay: 1.6s !important; }
+  @keyframes ring { from { transform: scale(1); opacity: .75; } to { transform: scale(1.85); opacity: 0; } }
+  #callBtn { position: relative; z-index: 1; width: 100%; height: 100%; border: 0; border-radius: 50%; background: var(--sun); color: var(--ink);
+             display: grid; place-items: center; box-shadow: 0 14px 34px rgba(245, 183, 0, .45); transition: background .25s, transform .15s; }
+  #callBtn:hover { transform: scale(1.03); }
+  #callBtn svg { width: 56px; height: 56px; }
+  .dial[data-state="speaking"] #callBtn { background: var(--ink); color: #fff; box-shadow: 0 14px 34px rgba(20, 43, 79, .35); }
+  .dial[data-state="connecting"] #callBtn { opacity: .7; }
+  #status { margin-top: 20px; font-weight: 700; font-size: 18px; text-align: center; min-height: 28px; }
+  #hint { color: var(--muted); font-size: 14px; text-align: center; min-height: 22px; }
+  #endBtn { margin-top: 12px; }
+
+  /* Разговор */
+  .chat { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding: 4px; }
+  .chat:empty::before { content: "Здесь появится разговор с оператором."; color: var(--muted); font-size: 15px; text-align: center; padding: 12px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 18px; font-size: 15px; }
+  .msg.ai { align-self: flex-start; background: var(--bg); border-bottom-left-radius: 6px; }
+  .msg.user { align-self: flex-end; background: var(--ink); color: #fff; border-bottom-right-radius: 6px; }
+
+  details.text-mode { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+  details.text-mode summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+  textarea { width: 100%; min-height: 96px; margin-top: 12px; font: inherit; border: 1.5px solid var(--line); border-radius: var(--r-md); padding: 12px; resize: vertical; }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  /* Путь заявки */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  .steps li { position: relative; padding: 0 0 18px 44px; counter-increment: s; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%;
+                      display: grid; place-items: center; font: 700 13px var(--text); background: var(--bg); color: var(--muted); }
+  .steps li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 32px; bottom: 4px; width: 2px; background: var(--line); }
+  .steps li.done::before { background: var(--ok); color: #fff; content: "✓"; }
+  .steps li.active::before { background: var(--sun); color: var(--ink); }
+  .steps b { display: block; }
+  .steps .d { color: var(--muted); font-size: 14px; }
+  .steps .ms { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+  .result { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 18px; }
+  .result h3 { font: 600 17px/1.35 var(--display); margin: 0 0 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .cand { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px dashed var(--line); }
+  .avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--sea-soft); display: grid; place-items: center; font-weight: 700; }
+  .cand .why { color: var(--muted); font-size: 14px; }
+  .err { color: var(--urgent); font-weight: 600; }
+  .tg-box { display: flex; gap: 16px; align-items: flex-start; background: var(--sea-soft); border-radius: var(--r-md); padding: 14px; margin: 4px 0 16px; }
+  .tg-box p { margin: 4px 0 8px; }
+  .qr { flex: none; background: #fff; padding: 6px; border-radius: 8px; line-height: 0; }
+  @media (max-width: 480px) { .tg-box { flex-direction: column; } }
+  .tg-link { display: inline-block; margin: 4px 0 6px; padding: 11px 20px; border-radius: var(--r-sm); background: #2AA3E0; color: #fff; text-decoration: none; font-weight: 700; }
+  pre { white-space: pre-wrap; font-size: 13px; background: var(--bg); padding: 12px; border-radius: var(--r-md); }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Рядом</span></a>
+  <nav class="nav"><a href="/" aria-current="page">Линия</a><a href="/volunteers">Заявки</a><a href="/join">Стать волонтёром</a></nav>
+</header>
+
+<main>
+  <h1>Позвоните и расскажите, что нужно</h1>
+  <p class="lead">Русскоязычная линия взаимопомощи в Барселоне. Оператор задаст пару коротких вопросов, а мы найдём волонтёра:
+  сходить с вами к врачу, в банк, в аюнтамьенто или разобрать письмо.</p>
+
+  <div class="grid">
+    <section class="panel" aria-label="Звонок">
+      <div class="stage">
+        <div class="dial" id="dial" data-state="idle">
+          <span class="ring"></span><span class="ring"></span><span class="ring"></span>
+          <button id="callBtn" aria-label="Позвонить">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2Z"/></svg>
+          </button>
+        </div>
+        <div id="status">Нажмите, чтобы позвонить</div>
+        <div id="hint">Говорите, когда круги жёлтые. Пока говорит оператор, микрофон выключен.</div>
+        <button class="btn btn-ghost" id="endBtn" hidden>Завершить звонок</button>
+      </div>
+
+      <div class="chat" id="log" aria-live="polite"></div>
+
+      <details class="text-mode">
+        <summary>Нет микрофона? Опишите просьбу текстом</summary>
+        <textarea id="manual" placeholder="Например: мне завтра в 10 к врачу в CAP Gràcia, а я не говорю по-испански…"></textarea>
+        <div class="row">
+          <button class="btn btn-ink" id="sendManual">Создать заявку</button>
+          <button class="btn btn-ghost" id="sample">Вставить пример</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel" aria-label="Путь заявки">
+      <h2>Путь заявки</h2>
+      <ol class="steps" id="trace">
+        <li><b>Звонок</b><span class="d">Оператор собирает: что нужно, когда, где и на каком языке</span></li>
+        <li><b>Gemma 4 понимает просьбу</b><span class="d">Сфера, тип помощи, срочность, детали</span></li>
+        <li><b>Подбор волонтёров</b><span class="d">По навыкам, языку и району, с объяснением</span></li>
+        <li><b>Волонтёрам в Telegram</b><span class="d">Кто первым нажмёт «Беру», тот и помогает</span></li>
+      </ol>
+      <div class="result" id="resultCard" hidden></div>
+    </section>
+  </div>
+
+  <p class="disclaimer">«Рядом» соединяет людей с волонтёрами и не даёт юридических, налоговых или медицинских консультаций.
+  Если есть угроза жизни или здоровью, звоните 112.</p>
+</main>
+
+<script type="module">
+import { Conversation } from "https://esm.sh/@elevenlabs/client?bundle";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const URG = { high: "срочно", medium: "на неделе", low: "без срока" };
+let conversation = null;
+let transcript = [];
+
+function setState(state, status, hint = "") {
+  $("dial").dataset.state = state;
+  $("status").textContent = status;
+  $("hint").textContent = hint;
+  $("endBtn").hidden = !["listening", "speaking"].includes(state);
+}
+
+function addLine(role, text) {
+  transcript.push(`${role === "ai" ? "Оператор" : "Звонящий"}: ${text}`);
+  const p = document.createElement("div");
+  p.className = "msg " + role; p.textContent = text;
+  $("log").appendChild(p);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function markSteps(activeUpTo) {
+  [...$("trace").children].forEach((li, i) => {
+    li.classList.toggle("done", i < activeUpTo);
+    li.classList.toggle("active", i === activeUpTo);
+  });
+}
+
+function renderResult(d) {
+  $("trace").innerHTML = (d._trace || []).map((s) =>
+    `<li class="done"><b>${esc(s.step)}</b><span class="d">${esc(s.detail)}</span>` +
+    (s.ms != null ? ` <span class="ms">· ${(s.ms / 1000).toFixed(1)} с</span>` : "") + "</li>").join("");
+  const chips = [
+    d.urgency === "high" ? `<span class="chip urgent">${URG.high}</span>` : `<span class="chip">${esc(URG[d.urgency] || d.urgency)}</span>`,
+    ...(d.topics || []).map((t) => `<span class="chip">${esc(t)}</span>`),
+    ...(d.help || []).map((t) => `<span class="chip help">${esc(t)}</span>`),
+    d.when ? `<span class="chip">${esc(d.when)}</span>` : "",
+    d.district ? `<span class="chip">${esc(d.district)}</span>` : "",
+  ].join("");
+  const cands = (d.candidates || []).map((c) =>
+    `<div class="cand"><span class="avatar">${esc(c.name[0])}</span><div><b>${esc(c.name)}</b><div class="why">${esc(c.reason)}</div></div></div>`).join("")
+    || '<p class="muted">Подходящих волонтёров нет — заявку увидит координатор.</p>';
+  $("resultCard").innerHTML = `
+    <h3>${esc(d.name ? d.name + ": " : "")}${esc(d.summary)}</h3>
+    <div class="chips">${chips}</div>
+    ${d.requester_link ? `<div class="tg-box">
+        <div id="qr" class="qr" aria-label="QR-код ссылки на бота"></div>
+        <div><b>Статус заявки в Telegram</b>
+          <p class="small muted">Отсканируйте код или откройте ссылку и нажмите Start. Бот напишет, когда волонтёр возьмёт заявку, и пришлёт его контакт.</p>
+          <a class="tg-link" href="${esc(d.requester_link)}" target="_blank" rel="noopener">Открыть бота</a>
+          <p class="small muted">Если бот не ответил, отправьте ему: <code>/start r${d.id}</code></p></div>
+      </div>` : ""}
+    <b>Кому предложили</b>${cands}
+    <p class="small"><a href="/volunteers">Открыть в заявках</a></p>
+    <details><summary class="small muted">Данные заявки (JSON)</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+  $("resultCard").hidden = false;
+  if (d.requester_link && window.QRCode) new QRCode($("qr"), { text: d.requester_link, width: 128, height: 128 });
+}
+
+async function submit(text) {
+  setState("idle", "Создаём заявку…", "Обычно это несколько секунд");
+  markSteps(1);
+  $("resultCard").hidden = true;
+  try {
+    const r = await fetch("/api/calls", { method: "POST", headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ transcript: text }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || `Сервер ответил ${r.status}. Попробуйте ещё раз.`);
+    renderResult(data);
+    setState("idle", "Заявка создана", "Волонтёры уже получили её. Можно позвонить снова.");
+  } catch (e) {
+    markSteps(-1);
+    $("resultCard").innerHTML = `<p class="err">Заявка не создана: ${esc(e.message)}</p>`;
+    $("resultCard").hidden = false;
+    setState("idle", "Не получилось", "Проверьте соединение и попробуйте ещё раз");
+  }
+}
+
+async function startCall() {
+  setState("connecting", "Соединяем…", "Разрешите доступ к микрофону");
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    const cfg = await (await fetch("/api/config")).json();
+    if (!cfg.agentId && !cfg.signedUrl) {
+      setState("idle", "Голосовая линия не настроена", "Добавьте ELEVENLABS_AGENT_ID в .env или опишите просьбу текстом ниже");
+      return;
+    }
+    transcript = []; $("log").innerHTML = ""; markSteps(0);
+    conversation = await Conversation.startSession({
+      ...cfg,
+      onConnect: () => setState("listening", "На линии", "Говорите, когда круги жёлтые"),
+      onMessage: (m) => addLine((m.source || m.role) === "user" ? "user" : "ai", m.message),
+      // Разговор по очереди: пока говорит оператор, микрофон выключен — нет эха и шума зала
+      onModeChange: ({ mode }) => {
+        const speaking = mode === "speaking";
+        conversation?.setMicMuted?.(speaking);
+        if (conversation) setState(speaking ? "speaking" : "listening",
+          speaking ? "Говорит оператор" : "Говорите, вас слушают",
+          speaking ? "Микрофон выключен, пока оператор говорит" : "Скажите «до свидания», чтобы закончить");
+      },
+      onError: (e) => setState("idle", "Связь прервалась", String(e)),
+      onDisconnect: async () => {
+        conversation = null;
+        if (transcript.length) await submit(transcript.join("\n"));
+        else setState("idle", "Нажмите, чтобы позвонить");
+      },
+    });
+  } catch (e) { conversation = null; setState("idle", "Не удалось позвонить", e.message); }
+}
+
+const endCall = () => conversation?.endSession();
+$("callBtn").onclick = () => (conversation ? endCall() : startCall());
+$("endBtn").onclick = endCall;
+$("sendManual").onclick = () => $("manual").value.trim() && submit($("manual").value);
+$("sample").onclick = () => {
+  $("manual").value = "Звонящий: Здравствуйте, меня зовут Ольга. Мне завтра в десять утра к врачу в CAP в Грасии, а я совсем не говорю по-испански. Можно, чтобы кто-то сходил со мной? Мой телефон 612 345 678.";
+};
+</script>
+</body>
+</html>
